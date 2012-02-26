@@ -327,6 +327,11 @@ void RenderTarget::ApplyBlendMode(BlendMode mode)
                 GLCheck(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
             break;
 
+        // Premultiplied alpha blending
+        case BlendPremultipliedAlpha :
+            GLCheck(glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA));
+            break;
+
         // Additive blending
         case BlendAdd :
             GLCheck(glBlendFunc(GL_SRC_ALPHA, GL_ONE));

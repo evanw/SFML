@@ -34,10 +34,11 @@ namespace sf
 ////////////////////////////////////////////////////////////
 enum BlendMode
 {
-    BlendAlpha,    ///< Pixel = Source * Source.a + Dest * (1 - Source.a)
-    BlendAdd,      ///< Pixel = Source + Dest
-    BlendMultiply, ///< Pixel = Source * Dest
-    BlendNone      ///< Pixel = Source
+    BlendAlpha,              ///< Pixel = Source * Source.a + Dest * (1 - Source.a)
+    BlendPremultipliedAlpha, ///< Pixel = Source + Dest * (1 - Source.a)
+    BlendAdd,                ///< Pixel = Source + Dest
+    BlendMultiply,           ///< Pixel = Source * Dest
+    BlendNone                ///< Pixel = Source
 };
 
 } // namespace sf
