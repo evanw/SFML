@@ -37,6 +37,17 @@
 #include <cstring>
 
 
+////////////////////////////////////////////////////////////
+/// \brief Get the correct minification filter based on
+/// the current status of smoothing and mipmapping
+////////////////////////////////////////////////////////////
+inline GLenum GetMinFilter(bool isSmooth, bool usesMipmapping)
+{
+    if (isSmooth) return usesMipmapping ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
+    return usesMipmapping ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST;
+}
+
+
 namespace
 {
     // Thread-safe unique identifier generator,
@@ -56,15 +67,17 @@ namespace sf
 {
 ////////////////////////////////////////////////////////////
 Texture::Texture() :
-myWidth        (0),
-myHeight       (0),
-myTextureWidth (0),
-myTextureHeight(0),
-myTexture      (0),
-myIsSmooth     (false),
-myIsRepeated   (false),
-myPixelsFlipped(false),
-myCacheId      (GetUniqueId())
+myWidth         (0),
+myHeight        (0),
+myTextureWidth  (0),
+myTextureHeight (0),
+myTexture       (0),
+myIsSmooth      (false),
+myIsRepeated    (false),
+myPixelsFlipped (false),
+myCacheId       (GetUniqueId()),
+myUsesMipmapping(false),
+myMipmapLodBias (0)
 {
 
 }
@@ -72,15 +85,17 @@ myCacheId      (GetUniqueId())
 
 ////////////////////////////////////////////////////////////
 Texture::Texture(const Texture& copy) :
-myWidth        (0),
-myHeight       (0),
-myTextureWidth (0),
-myTextureHeight(0),
-myTexture      (0),
-myIsSmooth     (copy.myIsSmooth),
-myIsRepeated   (copy.myIsRepeated),
-myPixelsFlipped(false),
-myCacheId      (GetUniqueId())
+myWidth         (0),
+myHeight        (0),
+myTextureWidth  (0),
+myTextureHeight (0),
+myTexture       (0),
+myIsSmooth      (copy.myIsSmooth),
+myIsRepeated    (copy.myIsRepeated),
+myPixelsFlipped (false),
+myCacheId       (GetUniqueId()),
+myUsesMipmapping(copy.myUsesMipmapping),
+myMipmapLodBias (copy.myMipmapLodBias)
 {
     if (copy.myTexture)
         LoadFromImage(copy.CopyToImage());
@@ -148,11 +163,12 @@ bool Texture::Create(unsigned int width, unsigned int height)
 
     // Initialize the texture
     GLCheck(glBindTexture(GL_TEXTURE_2D, myTexture));
+    GLCheck(glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE));
     GLCheck(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, myTextureWidth, myTextureHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL));
     GLCheck(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, myIsRepeated ? GL_REPEAT : GL_CLAMP_TO_EDGE));
     GLCheck(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, myIsRepeated ? GL_REPEAT : GL_CLAMP_TO_EDGE));
     GLCheck(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, myIsSmooth ? GL_LINEAR : GL_NEAREST));
-    GLCheck(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, myIsSmooth ? GL_LINEAR : GL_NEAREST));
+    GLCheck(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GetMinFilter(myIsSmooth, myUsesMipmapping)));
     myCacheId = GetUniqueId();
 
     return true;
@@ -392,6 +408,9 @@ void Texture::Bind(CoordinateType coordinateType) const
     // Bind the texture
     GLCheck(glBindTexture(GL_TEXTURE_2D, myTexture));
 
+    // Set the mipmap bias
+    GLCheck(glTexEnvf(GL_TEXTURE_FILTER_CONTROL, GL_TEXTURE_LOD_BIAS, myUsesMipmapping ? myMipmapLodBias : 0));
+
     // Check if we need to define a special texture matrix
     if ((coordinateType == Pixels) || myPixelsFlipped)
     {
@@ -426,11 +445,13 @@ void Texture::Bind(CoordinateType coordinateType) const
 
 
 ////////////////////////////////////////////////////////////
-void Texture::SetSmooth(bool smooth)
+void Texture::SetSmooth(bool smooth, bool useMipmapping, float mipmapLodBias)
 {
     if (smooth != myIsSmooth)
     {
         myIsSmooth = smooth;
+        myUsesMipmapping = useMipmapping;
+        myMipmapLodBias = mipmapLodBias;
 
         if (myTexture)
         {
@@ -441,7 +462,7 @@ void Texture::SetSmooth(bool smooth)
 
             GLCheck(glBindTexture(GL_TEXTURE_2D, myTexture));
             GLCheck(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, myIsSmooth ? GL_LINEAR : GL_NEAREST));
-            GLCheck(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, myIsSmooth ? GL_LINEAR : GL_NEAREST));
+            GLCheck(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GetMinFilter(myIsSmooth, myUsesMipmapping)));
         }
     }
 }
@@ -451,6 +472,20 @@ void Texture::SetSmooth(bool smooth)
 bool Texture::IsSmooth() const
 {
     return myIsSmooth;
+}
+
+
+////////////////////////////////////////////////////////////
+bool Texture::UsesMipmapping() const
+{
+    return myUsesMipmapping;
+}
+
+
+////////////////////////////////////////////////////////////
+float Texture::GetMipmapLodBias() const
+{
+    return myMipmapLodBias;
 }
 
 
@@ -484,6 +519,35 @@ bool Texture::IsRepeated() const
 
 
 ////////////////////////////////////////////////////////////
+void Texture::ConvertToPremultipliedAlpha()
+{
+    // Read the pixels from the graphics card
+    Image image = CopyToImage();
+    std::vector<Uint8> data(myWidth * myHeight * 4);
+
+    // Convert standard alpha to premultiplied alpha
+    const Uint8 *from = image.GetPixelsPtr();
+    Uint8 *to = &data[0];
+    for (unsigned int y = 0; y < myHeight; y++)
+    {
+        for (unsigned int x = 0; x < myWidth; x++)
+        {
+            to[0] = from[0] * from[3] / 0xFF;
+            to[1] = from[1] * from[3] / 0xFF;
+            to[2] = from[2] * from[3] / 0xFF;
+            to[3] = from[3];
+            from += 4;
+            to += 4;
+        }
+    }
+
+    // Write the pixels to the graphics card
+    image.Create(myWidth, myHeight, data.data());
+    LoadFromImage(image);
+}
+
+
+////////////////////////////////////////////////////////////
 unsigned int Texture::GetMaximumSize()
 {
     EnsureGlContext();
@@ -500,15 +564,17 @@ Texture& Texture::operator =(const Texture& right)
 {
     Texture temp(right);
 
-    std::swap(myWidth,         temp.myWidth);
-    std::swap(myHeight,        temp.myHeight);
-    std::swap(myTextureWidth,  temp.myTextureWidth);
-    std::swap(myTextureHeight, temp.myTextureHeight);
-    std::swap(myTexture,       temp.myTexture);
-    std::swap(myIsSmooth,      temp.myIsSmooth);
-    std::swap(myIsRepeated,    temp.myIsRepeated);
-    std::swap(myPixelsFlipped, temp.myPixelsFlipped);
+    std::swap(myWidth,          temp.myWidth);
+    std::swap(myHeight,         temp.myHeight);
+    std::swap(myTextureWidth,   temp.myTextureWidth);
+    std::swap(myTextureHeight,  temp.myTextureHeight);
+    std::swap(myTexture,        temp.myTexture);
+    std::swap(myIsSmooth,       temp.myIsSmooth);
+    std::swap(myIsRepeated,     temp.myIsRepeated);
+    std::swap(myPixelsFlipped,  temp.myPixelsFlipped);
     myCacheId = GetUniqueId();
+    std::swap(myUsesMipmapping, temp.myUsesMipmapping);
+    std::swap(myMipmapLodBias,  temp.myMipmapLodBias);
 
     return *this;
 }

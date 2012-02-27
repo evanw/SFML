@@ -393,12 +393,27 @@ public :
     /// you should leave it disabled.
     /// The smooth filter is disabled by default.
     ///
-    /// \param smooth True to enable smoothing, false to disable it
+    /// Mipmapping can optionally be used for higher-quality
+    /// filtering. When mipmapping is enabled, a scaled-down
+    /// version of the texture will be used when the size of a
+    /// texel is less than the size of a pixel. This is useful
+    /// when a sprite will sometimes be drawn much smaller than
+    /// its native size.
     ///
-    /// \see IsSmooth
+    /// The mipmapLodBias parameter adjusts the computation that
+    /// determines which scale of the image to use. Positive
+    /// values bias towards smaller images, negative values
+    /// bias towards larger images, and zero uses the default
+    /// computation. LOD stands for level-of-detail.
+    ///
+    /// \param smooth True to enable smoothing, false to disable it
+    /// \param useMipmapping True to enable mipmapping, false to disable it
+    /// \param mipmapLodBias An adjustment value to add to the mipmap level
+    ///
+    /// \see IsSmooth, UsesMipmapping, GetMipmapLodBias
     ///
     ////////////////////////////////////////////////////////////
-    void SetSmooth(bool smooth);
+    void SetSmooth(bool smooth, bool useMipmapping = false, float mipmapLodBias = 0);
 
     ////////////////////////////////////////////////////////////
     /// \brief Tell whether the smooth filter is enabled or not
@@ -409,6 +424,26 @@ public :
     ///
     ////////////////////////////////////////////////////////////
     bool IsSmooth() const;
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Tell whether mipmapping is enabled or not
+    ///
+    /// \return True if mipmapping is enabled, false if it is disabled
+    ///
+    /// \see SetSmooth
+    ///
+    ////////////////////////////////////////////////////////////
+    bool UsesMipmapping() const;
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Get the mipmapping level-of-detail bias value
+    ///
+    /// \return The mipmapLodBias value passed into SetSmooth
+    ///
+    /// \see SetSmooth
+    ///
+    ////////////////////////////////////////////////////////////
+    float GetMipmapLodBias() const;
 
     ////////////////////////////////////////////////////////////
     /// \brief Enable or disable repeating
@@ -443,6 +478,14 @@ public :
     ///
     ////////////////////////////////////////////////////////////
     bool IsRepeated() const;
+
+    ////////////////////////////////////////////////////////////
+    /// \brief Convert this image for use with the blend mode
+    /// BlendPremultipliedAlpha. This performs color.rgb *= color.a
+    /// for each pixel.
+    ///
+    ////////////////////////////////////////////////////////////
+    void ConvertToPremultipliedAlpha();
 
     ////////////////////////////////////////////////////////////
     /// \brief Overload of assignment operator
@@ -489,15 +532,17 @@ private :
     ////////////////////////////////////////////////////////////
     // Member data
     ////////////////////////////////////////////////////////////
-    unsigned int myWidth;         ///< Image width
-    unsigned int myHeight;        ///< Image Height
-    unsigned int myTextureWidth;  ///< Actual texture width (can be greater than image width because of padding)
-    unsigned int myTextureHeight; ///< Actual texture height (can be greater than image height because of padding)
-    unsigned int myTexture;       ///< Internal texture identifier
-    bool         myIsSmooth;      ///< Status of the smooth filter
-    bool         myIsRepeated;    ///< Is the texture in repeat mode?
-    mutable bool myPixelsFlipped; ///< To work around the inconsistency in Y orientation
-    Uint64       myCacheId;       ///< Unique number that identifies the texture to the render target's cache
+    unsigned int myWidth;          ///< Image width
+    unsigned int myHeight;         ///< Image Height
+    unsigned int myTextureWidth;   ///< Actual texture width (can be greater than image width because of padding)
+    unsigned int myTextureHeight;  ///< Actual texture height (can be greater than image height because of padding)
+    unsigned int myTexture;        ///< Internal texture identifier
+    bool         myIsSmooth;       ///< Status of the smooth filter
+    bool         myIsRepeated;     ///< Is the texture in repeat mode?
+    mutable bool myPixelsFlipped;  ///< To work around the inconsistency in Y orientation
+    Uint64       myCacheId;        ///< Unique number that identifies the texture to the render target's cache
+    bool         myUsesMipmapping; ///< Status of mipmapping
+    float        myMipmapLodBias;  ///< Mipmapping level-of-detail bias if mipmapping is enabled
 };
 
 } // namespace sf
